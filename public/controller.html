@@ -7,8 +7,20 @@
   <style>
     * { box-sizing: border-box; touch-action: none; user-select: none; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-    body { background: #07111f; color: white; font-family: system-ui, sans-serif; }
-    #status { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; z-index: 2; transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: #14253b; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
+    body { --player-color: #1687ff; background: #07111f; color: white; font-family: system-ui, sans-serif; box-shadow: inset 0 0 0 7px var(--player-color); }
+    body::after { content: ''; position: fixed; inset: 0; z-index: 20; pointer-events: none; background: transparent; }
+    body.hit::after { animation: collision-flash .55s ease-out; }
+    @keyframes collision-flash { 0%, 35% { background: #fff; } 70% { background: #ff2626aa; } 100% { background: transparent; } }
+    body.waiting #controls { opacity: .28; pointer-events: none; }
+    #status { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; z-index: 3; transform: translateX(-50%); padding: 7px 14px; border: 2px solid var(--player-color); border-radius: 999px; background: #14253b; font-size: 13px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; }
+    #ready { position: fixed; left: 50%; top: 50%; z-index: 4; width: min(72vw, 360px); height: min(28vh, 150px); transform: translate(-50%, -50%); border-color: var(--player-color); background: var(--player-color); font-size: clamp(28px, 9vw, 56px); }
+    #ready:disabled { opacity: .75; }
+    #name-entry, #result { position: fixed; left: 50%; top: 50%; z-index: 5; width: min(88vw, 440px); transform: translate(-50%, -50%); padding: 22px; border: 3px solid var(--player-color); border-radius: 18px; background: #0d1d30f5; text-align: center; box-shadow: 0 12px 40px #000b; }
+    #name-entry h1, #result h1 { margin: 0 0 16px; font-size: clamp(24px, 7vw, 42px); }
+    #player-name { width: 100%; height: 58px; padding: 0 14px; border: 2px solid #55708f; border-radius: 12px; background: white; color: #081521; font-size: 24px; font-weight: 800; text-align: center; touch-action: auto; user-select: text; }
+    #save-name { width: 100%; height: 64px; margin-top: 12px; border-color: var(--player-color); background: var(--player-color); font-size: 24px; }
+    #result p { margin: 9px 0; font-size: clamp(18px, 5vw, 27px); font-weight: 800; }
+    #result-title { color: var(--player-color); }
     #controls { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; height: 100%; padding: max(48px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
     .side { display: grid; gap: 12px; }
     .steering { grid-template-columns: 1fr 1fr; }
@@ -23,6 +35,18 @@
 </head>
 <body>
   <div id="status">CONECTANDO</div>
+  <section id="name-entry" hidden>
+    <h1>INGRESA TU NOMBRE</h1>
+    <input id="player-name" maxlength="16" autocomplete="nickname" placeholder="Tu nombre">
+    <button id="save-name" type="button">CONTINUAR</button>
+  </section>
+  <button id="ready" type="button" hidden>LISTO</button>
+  <section id="result" hidden>
+    <h1 id="result-title"></h1>
+    <p id="result-time"></p>
+    <p id="result-best"></p>
+    <p id="result-difference"></p>
+  </section>
   <main id="controls">
     <section class="side steering">
       <button id="left" aria-label="Izquierda">◀<span class="label">IZQUIERDA</span></button>
@@ -36,16 +60,175 @@
   <script>
     const state = { left: false, right: false, up: false, down: false };
     const status = document.querySelector('#status');
+    const readyButton = document.querySelector('#ready');
+    const nameEntry = document.querySelector('#name-entry');
+    const nameInput = document.querySelector('#player-name');
+    const saveNameButton = document.querySelector('#save-name');
+    const resultPanel = document.querySelector('#result');
+    const resultTitle = document.querySelector('#result-title');
+    const resultTime = document.querySelector('#result-time');
+    const resultBest = document.querySelector('#result-best');
+    const resultDifference = document.querySelector('#result-difference');
+    const playerColors = ['#e53935', '#1687ff', '#ffd21f', '#24c96b'];
     let socket;
+    let player = 0;
+    let isHost = false;
+    let isReady = false;
+    let playerName = '';
+    let shouldReconnect = true;
+    let audioContext;
+    let engineNodes;
+
+    document.body.classList.add('waiting');
+
+    function ensureAudio() {
+      audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') audioContext.resume();
+    }
+
+    function startEngine() {
+      ensureAudio();
+      if (engineNodes) return;
+
+      const gain = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      const low = audioContext.createOscillator();
+      const high = audioContext.createOscillator();
+      const now = audioContext.currentTime;
+
+      low.type = 'sawtooth';
+      low.frequency.setValueAtTime(58, now);
+      low.frequency.exponentialRampToValueAtTime(105, now + .7);
+      high.type = 'square';
+      high.frequency.setValueAtTime(29, now);
+      high.frequency.exponentialRampToValueAtTime(52, now + .7);
+      filter.type = 'lowpass';
+      filter.frequency.value = 650;
+      gain.gain.setValueAtTime(.0001, now);
+      gain.gain.exponentialRampToValueAtTime(.17, now + .08);
+
+      low.connect(filter);
+      high.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioContext.destination);
+      low.start();
+      high.start();
+      engineNodes = { low, high, gain };
+    }
+
+    function stopEngine() {
+      if (!engineNodes || !audioContext) return;
+      const nodes = engineNodes;
+      const now = audioContext.currentTime;
+      nodes.gain.gain.cancelScheduledValues(now);
+      nodes.gain.gain.setValueAtTime(Math.max(nodes.gain.gain.value, .0001), now);
+      nodes.gain.gain.exponentialRampToValueAtTime(.0001, now + .12);
+      nodes.low.stop(now + .14);
+      nodes.high.stop(now + .14);
+      engineNodes = null;
+    }
+
+    function collisionFeedback() {
+      document.body.classList.remove('hit');
+      void document.body.offsetWidth;
+      document.body.classList.add('hit');
+      setTimeout(() => document.body.classList.remove('hit'), 600);
+
+      if (navigator.vibrate) {
+        navigator.vibrate([280, 70, 280, 70, 420]);
+        setTimeout(() => navigator.vibrate(320), 850);
+      }
+    }
+
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainder = seconds - minutes * 60;
+      return `${String(minutes).padStart(2, '0')}:${remainder.toFixed(2).padStart(5, '0')}`;
+    }
+
+    function showPersonalResult(result) {
+      for (const key of Object.keys(state)) state[key] = false;
+      sendInput();
+      const medals = ['🏆 GANASTE', '🥈 Terminaste 2°', '🥉 Terminaste 3°'];
+      resultTitle.textContent = medals[result.position - 1] || `Terminaste ${result.position}°`;
+      resultTime.textContent = `Tiempo: ${formatTime(result.totalTime)}`;
+      resultBest.textContent = `Mejor vuelta: ${formatTime(result.bestLap)}`;
+      resultDifference.textContent = result.position === 1 ? '' : `Te faltaron ${result.difference.toFixed(2)} s`;
+      resultPanel.hidden = false;
+      document.body.classList.add('waiting');
+      stopEngine();
+    }
 
     function connect() {
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}?role=controller`);
       socket.addEventListener('message', event => {
         const message = JSON.parse(event.data);
-        if (message.type === 'welcome') status.textContent = `JUGADOR ${message.player}`;
+        if (message.type === 'welcome') {
+          player = message.player;
+          isHost = Boolean(message.host);
+          status.textContent = `P${player} - ESPERANDO`;
+          document.body.style.setProperty('--player-color', playerColors[player - 1]);
+          readyButton.textContent = isHost ? 'INICIAR CARRERA' : 'LISTO';
+          nameEntry.hidden = false;
+          nameInput.focus();
+        }
+        if (message.type === 'nameSaved') {
+          playerName = message.name;
+          nameEntry.hidden = true;
+          readyButton.hidden = false;
+          status.textContent = `P${player} ${playerName} - ESPERANDO`;
+        }
+        if (message.type === 'nameError') {
+          nameEntry.hidden = false;
+          readyButton.hidden = true;
+          nameInput.focus();
+        }
         if (message.type === 'full') status.textContent = 'SALA COMPLETA';
+        if (message.type === 'locked') {
+          shouldReconnect = false;
+          status.textContent = 'CARRERA EN CURSO';
+          readyButton.hidden = true;
+          document.querySelector('#controls').hidden = true;
+        }
+        if (message.type === 'vibrate') collisionFeedback();
+        if (message.type === 'lap') status.textContent = `P${player} ${playerName} - VUELTA ${message.lap}/${message.totalLaps}`;
+        if (message.type === 'personalResult') showPersonalResult(message.result);
+        if (message.type === 'waiting') {
+          readyButton.disabled = false;
+          readyButton.textContent = 'INICIAR CARRERA';
+          status.textContent = `FALTA LISTO: ${message.missingPlayers.map(number => `P${number}`).join(', ')}`;
+        }
+        if (message.type === 'race') {
+          if (message.state === 'lobby') {
+            const ownState = message.players?.find(item => item.player === player);
+            isReady = Boolean(ownState?.ready);
+            document.body.classList.add('waiting');
+            resultPanel.hidden = true;
+            readyButton.hidden = !playerName;
+            nameEntry.hidden = Boolean(playerName);
+            readyButton.disabled = !isHost && isReady;
+            readyButton.textContent = isHost ? 'INICIAR CARRERA' : (isReady ? 'PREPARADO' : 'LISTO');
+            status.textContent = player ? `P${player} ${playerName} - ${isReady ? 'LISTO' : 'ESPERANDO'}` : 'CONECTANDO';
+          }
+          if (message.state === 'countdown') {
+            readyButton.hidden = true;
+            status.textContent = `P${player} - ${message.countdown}`;
+          }
+          if (message.state === 'racing') {
+            document.body.classList.remove('waiting');
+            readyButton.hidden = true;
+            status.textContent = `P${player} - CARRERA`;
+          }
+          if (message.state === 'finished') {
+            document.body.classList.add('waiting');
+            stopEngine();
+            status.textContent = message.winner === player ? `P${player} - GANADOR` : `GANA P${message.winner}`;
+          }
+        }
       });
       socket.addEventListener('close', () => {
+        stopEngine();
+        if (!shouldReconnect) return;
         status.textContent = 'RECONECTANDO';
         setTimeout(connect, 1000);
       });
@@ -66,6 +249,7 @@
         event.preventDefault();
         state[id] = pressed;
         button.classList.toggle('active', pressed);
+        if (id === 'up') pressed ? startEngine() : stopEngine();
         sendInput();
       };
       button.addEventListener('pointerdown', event => {
@@ -75,6 +259,31 @@
       button.addEventListener('pointerup', setPressed(false));
       button.addEventListener('pointercancel', setPressed(false));
     }
+
+    function saveName() {
+      const name = nameInput.value.trim();
+      if (!name || !socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: 'name', name }));
+    }
+
+    saveNameButton.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      ensureAudio();
+      saveName();
+    });
+    nameInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') saveName();
+    });
+
+    readyButton.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      ensureAudio();
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: isHost ? 'start' : 'ready', ready: true }));
+      readyButton.disabled = true;
+      readyButton.textContent = isHost ? 'COMPROBANDO...' : 'PREPARADO';
+      status.textContent = isHost ? `P${player} - INICIANDO` : `P${player} - LISTO`;
+    });
 
     connect();
     setInterval(sendInput, 100);
