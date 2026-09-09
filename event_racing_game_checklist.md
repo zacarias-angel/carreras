@@ -60,7 +60,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Tiempo total.
 - [x] Mejor vuelta.
 - [x] Deteccion automatica de llegada.
-- [x] La carrera espera a todos hasta 15 segundos despues de la llegada del ganador.
+- [x] La carrera espera que terminen todos los participantes conectados.
 - [x] Posiciones calculadas con vueltas y progreso en la vuelta.
 - [x] Clasificacion visible `1°, 2°, 3°...`.
 - [x] Penalizacion de velocidad al circular por cesped.
@@ -68,7 +68,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Velocidad y aceleracion arcade configuradas.
 - [ ] Cronometro general visible durante toda la carrera.
 - [ ] Invalidacion de vuelta por cortar camino.
-- [x] Timeout de 15 segundos para jugadores que no terminan.
+- [ ] Duracion maxima y timeout para jugadores que no terminan.
 - [ ] Deteccion avanzada de direccion incorrecta.
 
 ## 5. Autos, camaras y pantalla dividida
@@ -107,7 +107,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Sonido de victoria y derrota.
 - [ ] Shake de interfaz al chocar.
 - [ ] Informacion de posicion en vivo dentro del celular.
-- [x] Orientacion landscape obligatoria con aviso para girar.
+- [ ] Orientacion landscape obligatoria con aviso para girar.
 - [ ] Screen Wake Lock.
 - [ ] Modo fullscreen o PWA.
 
@@ -137,7 +137,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Aviso y efecto de ultima vuelta en celular.
 - [ ] Celebracion con confetti.
 - [ ] Sonido y vibracion especial del ganador.
-- [x] Tiempo limite para cerrar la carrera despues del ganador.
+- [ ] Tiempo limite para cerrar la carrera despues del ganador.
 - [ ] Puntaje acumulable por posicion.
 
 ## 9. Sesiones y robustez
@@ -217,7 +217,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 
 - [x] **MVP completado: respawn automatico.**
 - [ ] Ultima vuelta con feedback audiovisual.
-- [x] Timeout despues de la llegada del ganador.
+- [ ] Timeout despues de la llegada del ganador.    
 - [ ] Reconexion conservando nombre y jugador.
 - [ ] Panel minimo de operador.
 - [ ] Ranking persistente de mejores tiempos.
