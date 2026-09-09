@@ -18,6 +18,7 @@ Este manual describe como ejecutar, operar y ajustar el proyecto actual. Los cam
 - Entidad `Root`: contiene los scripts generales.
 - Script `localMultiplayer`: conecta la pantalla con el servidor y crea autos/camaras.
 - Script `raceManager`: administra parrilla, vueltas, tiempos, posiciones y resultados.
+- Script `raceProgressReporter`: informa al servidor el avance de cada auto para ordenar a quienes no terminan.
 - Script `viewportFrames`: dibuja marcos, etiquetas y asigna materiales.
 - Entidad `Player Car`: auto base que se clona para los demas jugadores.
 - Script `arcadeCar`: movimiento, velocidad en asfalto/cesped y seguimiento de camara.
@@ -80,9 +81,11 @@ No cerrar esa terminal durante el evento.
 6. Los autos quedan bloqueados hasta `YA!`.
 7. Cada jugador completa 3 vueltas.
 8. La pantalla actualiza posiciones usando vueltas y progreso.
-9. Cada jugador recibe su resultado al terminar.
-10. Cuando terminan todos, se muestra el podio.
-11. Despues de 12 segundos el sistema vuelve al lobby.
+9. Cuando llega el ganador comienza un limite final de 15 segundos.
+10. Cada jugador recibe su resultado al terminar o al agotarse el limite.
+11. Quienes no terminan se ordenan por vueltas y progreso dentro de la vuelta.
+12. Cuando terminan todos o vence el limite, se muestra el podio.
+13. Despues de 12 segundos el sistema vuelve al lobby.
 
 ## 4. Parametros del servidor
 
@@ -140,6 +143,16 @@ lobbyTimer = setTimeout(returnToLobby, 12000);
 ```
 
 El valor esta expresado en milisegundos. `12000` equivale a 12 segundos.
+
+### Tiempo limite despues del ganador
+
+El limite final se configura en segundos:
+
+```js
+const finishTimeoutSeconds = 15;
+```
+
+Al agotarse, el servidor asigna las posiciones restantes usando el ultimo progreso informado por PlayCanvas.
 
 ### Longitud del nombre
 
@@ -216,6 +229,10 @@ Los textos visibles estan dentro del HTML y en las funciones:
 - Boton `ready`.
 - Boton `save-name`.
 
+### Orientacion del celular
+
+El controller solo permite jugar en horizontal. En vertical oculta toda la interfaz, muestra `GIRA EL TELEFONO PARA JUGAR` y envia controles neutros para que el auto no conserve una entrada presionada.
+
 ## 6. Configuracion de autos en PlayCanvas
 
 ### Entidad base
@@ -271,16 +288,16 @@ Seleccionar `Root > Player Car > Script > arcadeCar`.
 
 | Parametro | Valor | Funcion |
 | --- | ---: | --- |
-| `maxSpeed` | 30 | Velocidad maxima sobre asfalto. |
+| `maxSpeed` | 35 | Velocidad maxima sobre asfalto. |
 | `acceleration` | 20 | Rapidez para acelerar y desacelerar. |
-| `steerSpeed` | 120 | Velocidad de giro. |
-| `grassSpeedMultiplier` | 0.20 | Porcentaje de velocidad disponible en cesped. |
+| `steerSpeed` | 125 | Velocidad de giro. |
+| `grassSpeedMultiplier` | 0.50 | Porcentaje de velocidad disponible en cesped. |
 
 Ejemplos:
 
 - Mas velocidad: subir `maxSpeed` gradualmente.
-- Giro mas suave: bajar `steerSpeed` de `120` a `100`.
-- Cesped mas lento: bajar `grassSpeedMultiplier` de `0.20` a `0.12`.
+- Giro mas suave: bajar `steerSpeed` de `125` a `105`.
+- Cesped mas lento: bajar `grassSpeedMultiplier` de `0.50` a `0.25`.
 - Cesped menos severo: subirlo a `0.30`.
 
 ### Deteccion de asfalto
@@ -341,6 +358,8 @@ vueltas completadas + progreso angular dentro del ovalo
 
 Los radios de referencia son `34.5` y `19.5`. Deben coincidir aproximadamente con el ovalo de la pista.
 
+El script `raceProgressReporter`, tambien instalado en `Root`, usa estos radios y los mismos umbrales de vuelta para enviar progreso al servidor cada `0.25` segundos. Si se cambia el trazado, actualizar ambos scripts en conjunto.
+
 ## 10. Viewports
 
 Script: `viewportFrames` en la entidad `Root`.
@@ -362,7 +381,7 @@ El servidor recibe desde PlayCanvas:
 - tiempo total;
 - mejor vuelta.
 
-El orden de llegada define la posicion. La diferencia se calcula contra el tiempo del ganador.
+El orden de llegada define las primeras posiciones. Tras la llegada del ganador hay 15 segundos para terminar; los autos restantes se ordenan por vueltas completadas y progreso angular. La diferencia se calcula contra el tiempo del ganador.
 
 El resultado se muestra en dos lugares:
 
@@ -482,15 +501,15 @@ La logica esta en la entidad que contiene `speedZone`, no en la primitiva visual
 
 Mantener el centro del nuevo visual en la misma posicion de la entidad. El atributo `radius` controla la activacion y no se ajusta automaticamente al tamaño del modelo.
 
-## 15. Proximo paso minimo viable
+## 15. Respawn automatico
 
-El siguiente agregado recomendado es el **respawn automatico**.
+El respawn automatico esta implementado dentro de `arcadeCar`.
 
 ### Problema que resuelve
 
 Con una pista nueva, un jugador puede salir demasiado lejos, quedar mal orientado o perder mucho tiempo intentando regresar. En un evento esto bloquea la partida y reduce la rotacion de participantes.
 
-### Comportamiento propuesto
+### Comportamiento actual
 
 1. Mientras el auto circula sobre `asphalt`, guardar una posicion y orientacion valida.
 2. Si permanece fuera de asfalto durante 2.5 segundos, iniciar la recuperacion.
@@ -498,6 +517,17 @@ Con una pista nueva, un jugador puede salir demasiado lejos, quedar mal orientad
 4. Dejar su velocidad en cero.
 5. Mantener intactos jugador, nombre, color, vuelta, tiempo y camara.
 6. Esperar algunos segundos antes de permitir otro respawn.
+
+### Parametros configurables
+
+Seleccionar `Root > Player Car > Script > arcadeCar`:
+
+| Parametro | Valor | Funcion |
+| --- | ---: | --- |
+| `respawnDelay` | 2.5 | Segundos continuos fuera del asfalto antes de reaparecer. |
+| `respawnCooldown` | 3 | Espera minima antes de permitir otro respawn. |
+
+Los autos clonados para `P2-P4` heredan estos valores de `Player Car`.
 
 ### Criterio de aceptacion
 
@@ -508,6 +538,13 @@ Con una pista nueva, un jugador puede salir demasiado lejos, quedar mal orientad
 - Funciona de manera independiente para los 4 jugadores.
 - No necesita Ammo.js ni componentes Rigidbody.
 
-### Motivo de prioridad
+### Motivo de implementacion
 
-Es una mejora pequeña y aislada dentro de `arcadeCar`, pero evita que una carrera quede bloqueada. Por confiabilidad aporta mas al siguiente build que agregar nuevos power-ups, sonidos o efectos visuales.
+Es una mejora pequeña y aislada dentro de `arcadeCar`, pero evita que una carrera quede bloqueada. No modifica vueltas, tiempos, nombre, color ni camara.
+
+### Mejoras futuras
+
+- Mostrar `Volviendo a pista...` en el celular.
+- Agregar un efecto visual al reaparecer.
+- Aplicar una penalizacion de tiempo configurable.
+- Detectar un auto inmovil durante demasiado tiempo.

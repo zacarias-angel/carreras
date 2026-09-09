@@ -11,11 +11,14 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const players = new Map();
 const totalLaps = 3;
+const finishTimeoutSeconds = 15;
 let raceState = 'lobby';
 let countdownTimer = null;
 let lobbyTimer = null;
+let finishTimer = null;
 let raceParticipants = new Set();
 let results = [];
+let raceProgress = new Map();
 
 function getLanAddress() {
   for (const addresses of Object.values(os.networkInterfaces())) {
@@ -74,11 +77,71 @@ function sendRaceState(socket) {
 }
 
 function returnToLobby() {
+  if (finishTimer) clearInterval(finishTimer);
+  finishTimer = null;
   raceState = 'lobby';
   raceParticipants = new Set();
   results = [];
+  raceProgress = new Map();
   for (const socket of players.values()) socket.ready = false;
   broadcast({ type: 'race', state: raceState, players: playerState(), totalLaps });
+}
+
+function finishRace() {
+  if (raceState !== 'racing' || results.length === 0) return;
+  if (finishTimer) clearInterval(finishTimer);
+  finishTimer = null;
+
+  const winnerTime = results[0].totalTime;
+  const elapsedTime = winnerTime + finishTimeoutSeconds;
+  const unfinished = [...raceParticipants]
+    .filter(player => !results.some(result => result.player === player))
+    .map(player => ({ player, progress: raceProgress.get(player) || {} }))
+    .sort((a, b) => (Number(b.progress.score) || 0) - (Number(a.progress.score) || 0));
+
+  for (const entry of unfinished) {
+    const player = entry.player;
+    const progress = entry.progress;
+    const result = {
+      player,
+      name: players.get(player)?.playerName || `P${player}`,
+      position: results.length + 1,
+      totalTime: elapsedTime,
+      bestLap: Math.max(0, Number(progress.bestLap) || 0),
+      difference: Math.max(0, elapsedTime - winnerTime),
+      completed: false
+    };
+    results.push(result);
+    const controller = players.get(player);
+    if (controller) send(controller, { type: 'personalResult', result });
+    broadcastToGames({ type: 'resultUpdate', result, results });
+  }
+
+  raceState = 'finished';
+  broadcast({
+    type: 'race',
+    state: raceState,
+    winner: results[0].player,
+    results,
+    totalLaps
+  });
+  if (lobbyTimer) clearTimeout(lobbyTimer);
+  lobbyTimer = setTimeout(returnToLobby, 12000);
+}
+
+function startFinishTimeout() {
+  if (finishTimer) return;
+  let seconds = finishTimeoutSeconds;
+  broadcast({ type: 'finishCountdown', seconds });
+
+  finishTimer = setInterval(() => {
+    seconds -= 1;
+    if (seconds <= 0) {
+      finishRace();
+      return;
+    }
+    broadcast({ type: 'finishCountdown', seconds });
+  }, 1000);
 }
 
 function startCountdown(hostSocket) {
@@ -108,6 +171,7 @@ function startCountdown(hostSocket) {
     raceState = 'racing';
     raceParticipants = new Set(players.keys());
     results = [];
+    raceProgress = new Map();
     broadcast({ type: 'race', state: raceState, players: playerState(), totalLaps });
   }, 1000);
 }
@@ -210,8 +274,26 @@ wss.on('connection', (socket, request) => {
         const totalTime = Math.max(0, Number(message.totalTime) || 0);
         const bestLap = Math.max(0, Number(message.bestLap) || lapTime);
         const lapMessage = { type: 'lap', player, lap, lapTime, totalTime, bestLap, totalLaps };
+        const previousProgress = raceProgress.get(player) || {};
+        raceProgress.set(player, { ...previousProgress, laps: lap, bestLap, totalTime });
         if (controller) send(controller, lapMessage);
         broadcastToGames(lapMessage);
+      }
+
+      if (socket.role === 'game' && message.type === 'progress' && raceState === 'racing') {
+        const player = Number(message.player);
+        if (raceParticipants.has(player)) {
+          const previousProgress = raceProgress.get(player) || {};
+          const laps = Math.max(0, Number(message.laps) || 0);
+          const progress = Math.max(0, Math.min(1, Number(message.progress) || 0));
+          raceProgress.set(player, {
+            ...previousProgress,
+            laps,
+            progress,
+            score: Number(message.score) || laps * 1000000 + progress,
+            bestLap: Math.max(0, Number(message.bestLap) || previousProgress.bestLap || 0)
+          });
+        }
       }
 
       if (socket.role === 'game' && message.type === 'finish' && raceState === 'racing') {
@@ -223,7 +305,8 @@ wss.on('connection', (socket, request) => {
           name: players.get(player)?.playerName || `P${player}`,
           position: results.length + 1,
           totalTime: Math.max(0, Number(message.totalTime) || 0),
-          bestLap: Math.max(0, Number(message.bestLap) || 0)
+          bestLap: Math.max(0, Number(message.bestLap) || 0),
+          completed: true
         };
         results.push(result);
         const winnerTime = results[0].totalTime;
@@ -234,16 +317,9 @@ wss.on('connection', (socket, request) => {
         broadcastToGames({ type: 'resultUpdate', result, results });
 
         if (results.length >= raceParticipants.size) {
-          raceState = 'finished';
-          broadcast({
-            type: 'race',
-            state: raceState,
-            winner: results[0].player,
-            results,
-            totalLaps
-          });
-          if (lobbyTimer) clearTimeout(lobbyTimer);
-          lobbyTimer = setTimeout(returnToLobby, 12000);
+          finishRace();
+        } else if (results.length === 1) {
+          startFinishTimeout();
         }
       }
     } catch (_error) {
@@ -266,9 +342,7 @@ wss.on('connection', (socket, request) => {
     } else if (raceState === 'racing') {
       raceParticipants.delete(socket.player);
       if (raceParticipants.size > 0 && results.length >= raceParticipants.size) {
-        raceState = 'finished';
-        broadcast({ type: 'race', state: raceState, winner: results[0]?.player, results, totalLaps });
-        lobbyTimer = setTimeout(returnToLobby, 12000);
+        finishRace();
       }
     }
   });
