@@ -42,24 +42,26 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 
 - [x] Todos los autos aparecen antes de la linea.
 - [x] Parrilla para hasta 4 autos.
+- [x] Marcas editables `SPAWN_P1-P4` para centrar y orientar cada auto.
 - [x] Los autos permanecen inmoviles antes de largar.
-- [x] Cuenta regresiva sincronizada de 5 segundos.
+- [x] Cuenta regresiva sincronizada; 5 segundos por defecto y configurable.
 - [x] Mensaje `YA!` al iniciar.
 - [ ] Animacion completa de semaforo.
 - [ ] Sonido de countdown en pantalla y celulares.
 - [ ] Vibracion al comenzar.
 - [ ] Penalizacion por salida anticipada.
-- [ ] Countdown configurable desde interfaz de operador.
+- [x] Countdown configurable desde interfaz de operador.
 
 ## 4. Carrera
 
 - [x] Linea de largada y meta.
-- [x] Carrera de 3 vueltas.
+- [x] Carrera de 3 vueltas por defecto; cantidad configurable desde operador.
 - [x] Deteccion de vuelta con paso por la zona opuesta de la pista.
 - [x] Cronometro individual.
 - [x] Tiempo total.
 - [x] Mejor vuelta.
 - [x] Deteccion automatica de llegada.
+- [x] Finalizacion directa al validar el ultimo `CP4_FINISH`, sin exigir una vuelta adicional.
 - [x] La carrera espera que terminen todos los participantes conectados.
 - [x] Posiciones calculadas con vueltas y progreso en la vuelta.
 - [x] Clasificacion visible `1°, 2°, 3°...`.
@@ -67,8 +69,11 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Deteccion del asfalto real contra los triangulos de la malla de pista.
 - [x] Velocidad y aceleracion arcade configuradas.
 - [ ] Cronometro general visible durante toda la carrera.
-- [ ] Invalidacion de vuelta por cortar camino.
-- [ ] Duracion maxima y timeout para jugadores que no terminan.
+- [x] Invalidacion de vuelta por cortar camino mediante checkpoints secuenciales.
+- [x] Deteccion de cruce entre frames para no omitir checkpoints a alta velocidad.
+- [x] Duracion minima de 5 segundos por vuelta para evitar dobles conteos.
+- [x] Prueba automatizada con 2 jugadores: el primero termina exactamente al tercer `CP4_FINISH`.
+- [x] Timeout configurable para jugadores que no terminan despues del ganador.
 - [ ] Deteccion avanzada de direccion incorrecta.
 
 ## 5. Autos, camaras y pantalla dividida
@@ -93,23 +98,24 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 
 - [x] Botones grandes de direccion, acelerar y frenar.
 - [x] Estado visual al mantener presionado un boton.
-- [x] Sonido sintetizado de motor al acelerar.
+- [x] Sonido MP3 de motor precargado al acelerar.
 - [x] Audio desbloqueado mediante interaccion del usuario.
 - [x] Flash visual fuerte al detectar choque.
 - [x] Vibracion de choque cuando el navegador la soporta.
 - [x] Reconectando visible al perder el WebSocket.
 - [x] Scroll, zoom y seleccion accidental bloqueados durante el juego.
-- [ ] Indicador de potencia o velocidad.
+- [x] Velocidad y posicion en vivo en el celular.
 - [ ] Sonido de frenada.
 - [ ] Sonido de derrape.
 - [ ] Sonido de choque.
-- [ ] Sonido de ultima vuelta.
-- [ ] Sonido de victoria y derrota.
+- [x] Sonido sintetizado de ultima vuelta.
+- [x] Sonido de victoria.
+- [ ] Sonido de derrota diferenciado.
 - [ ] Shake de interfaz al chocar.
-- [ ] Informacion de posicion en vivo dentro del celular.
-- [ ] Orientacion landscape obligatoria con aviso para girar.
+- [x] Informacion de posicion en vivo dentro del celular.
+- [x] Orientacion landscape obligatoria con aviso para girar.
 - [ ] Screen Wake Lock.
-- [ ] Modo fullscreen o PWA.
+- [x] Fullscreen progresivo y PWA standalone para Android/iOS.
 
 ## 7. Colisiones y recuperacion
 
@@ -123,8 +129,10 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Sonido de impacto.
 - [ ] Colision con bordes fisicos.
 - [x] Respawn automatico despues de permanecer fuera del asfalto.
+- [x] Reposicion mediante historial automatico, sin puntos manuales de respawn.
+- [x] Restauracion de una orientacion anterior util y velocidad en cero.
 - [ ] Respawn por auto volcado o trabado; actualmente no hay fisica de vuelco.
-- [ ] Mensaje `Volviendo a pista...`.
+- [x] Mensaje `Volviendo a pista...` detectado al reposicionar el auto.
 
 ## 8. Ultima vuelta y final
 
@@ -133,11 +141,11 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Resultado personal en el celular.
 - [x] Podio final en pantalla principal.
 - [x] Tiempo total, mejor vuelta y diferencia contra el ganador.
-- [ ] Aviso `FINAL LAP` en pantalla.
-- [ ] Aviso y efecto de ultima vuelta en celular.
+- [x] Aviso `ULTIMA VUELTA` con nombre en pantalla.
+- [x] Aviso, sonido y vibracion de ultima vuelta en celular.
 - [ ] Celebracion con confetti.
-- [ ] Sonido y vibracion especial del ganador.
-- [ ] Tiempo limite para cerrar la carrera despues del ganador.
+- [x] Mensaje inmediato, sonido y vibracion especial del ganador.
+- [x] Tiempo limite posterior al ganador; 15 segundos por defecto y configurable.
 - [ ] Puntaje acumulable por posicion.
 
 ## 9. Sesiones y robustez
@@ -147,25 +155,25 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Reconexion automatica basica del socket.
 - [x] Estados de partida `lobby`, `countdown`, `racing` y `finished`.
 - [x] Estado de carrera centralizado en el servidor.
-- [ ] Recuperar la misma identidad al refrescar el celular.
-- [ ] Reservar el lugar durante una desconexion breve.
+- [x] Recuperar nombre, numero, color y auto al refrescar el celular.
+- [x] Reservar el lugar durante una desconexion breve de hasta 15 segundos.
 - [ ] Recuperar completamente una carrera al recargar la pantalla principal.
 - [ ] Timeout de jugador inactivo en lobby.
 - [ ] Latencia y ping medidos.
 - [ ] Pruebas en matriz Android Chrome / iOS Safari.
 - [ ] Diagnostico automatico de WebSocket, audio, vibracion y resolucion.
-- [ ] Servidor autoritativo para posicion y vueltas.
+- [x] Servidor autoritativo para orden de checkpoints, vueltas y ganador.
 - [ ] Tiempos calculados directamente por el reloj del servidor.
 
 ## 10. Operacion del evento
 
-- [ ] Panel de operador.
-- [ ] Iniciar, cancelar y reiniciar desde panel.
-- [ ] Expulsar jugador.
+- [x] Panel de operador en `/operator`.
+- [x] Iniciar, cancelar y reiniciar desde panel.
+- [x] Expulsar jugador.
 - [ ] Cambiar nickname.
-- [ ] Configurar vueltas, jugadores y duraciones.
+- [x] Configurar vueltas, countdown, timeout final y duracion de resultados.
 - [ ] Activar o desactivar audio, vibracion y colisiones.
-- [ ] Boton de emergencia `STOP RACE`.
+- [x] Boton de emergencia `DETENER`.
 - [ ] Health dashboard.
 - [ ] Logs descargables.
 - [ ] Cola de jugadores.
@@ -182,7 +190,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Record de pista.
 - [ ] Aviso de nuevo record.
 - [ ] Persistencia en archivo o base de datos.
-- [ ] Telemetria por carrera.
+- [ ] Persistencia de telemetria por carrera; la telemetria en vivo ya funciona.
 - [ ] Analytics del evento.
 - [ ] Codigo o QR unico de premio.
 - [ ] Validacion de premio por el staff.
@@ -216,12 +224,16 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 ## Proxima prioridad recomendada
 
 - [x] **MVP completado: respawn automatico.**
-- [ ] Ultima vuelta con feedback audiovisual.
-- [ ] Timeout despues de la llegada del ganador.    
-- [ ] Reconexion conservando nombre y jugador.
-- [ ] Panel minimo de operador.
+- [x] Ultima vuelta con feedback audiovisual.
+- [x] Timeout despues de la llegada del ganador.
+- [x] Reconexion conservando nombre y jugador.
+- [x] Panel minimo de operador.
+- [x] Posicion y velocidad en vivo en el celular.
+- [x] Aviso de respawn en el celular.
+- [x] Checkpoints antiatajo validados por el servidor.
 - [ ] Ranking persistente de mejores tiempos.
 - [ ] Configuracion por archivo de evento.
+- [ ] Pruebas fisicas completas con 1, 2, 3 y 4 autos en Android/iOS.
 
 ## Alcance del MVP completado: respawn automatico
 
@@ -229,14 +241,15 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Detectar cuando un auto permanece fuera de pista durante 2.5 segundos.
 - [x] Reubicarlo en su ultima posicion valida.
 - [x] Restaurar la ultima orientacion valida sobre el recorrido.
+- [x] Corregir el respawn usando una posicion y orientacion anteriores del historial del auto.
 - [x] Llevar su velocidad a cero al reaparecer.
 - [x] Aplicar un cooldown para evitar respawns repetidos.
 - [x] No alterar vueltas, tiempos, nombre, color ni camara.
 - [ ] Probar el comportamiento con 1, 2, 3 y 4 autos.
 
-### Fuera del alcance inicial
+### Mejoras complementarias
 
-- [ ] Mensaje `Volviendo a pista...` en el celular.
+- [x] Mensaje `Volviendo a pista...` en el celular.
 - [ ] Animacion o efecto visual de respawn.
 - [ ] Penalizacion de tiempo.
 - [ ] Deteccion de auto invertido; actualmente los autos no usan fisica de vuelco.

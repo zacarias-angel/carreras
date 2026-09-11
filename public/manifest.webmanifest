@@ -1,0 +1,19 @@
+{
+  "name": "Bermuda Racing Controller",
+  "short_name": "Bermuda Racing",
+  "description": "Control movil para Bermuda Racing",
+  "start_url": "/controller",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

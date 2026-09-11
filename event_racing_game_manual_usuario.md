@@ -8,6 +8,11 @@ Este manual describe como ejecutar, operar y ajustar el proyecto actual. Los cam
 
 - `carreras/server.js`: servidor HTTP, WebSocket, jugadores, lobby, countdown y resultados.
 - `carreras/public/controller.html`: interfaz que se abre en cada celular.
+- `carreras/public/operator.html`: panel de control para el staff.
+- `carreras/public/manifest.webmanifest`: configuracion PWA y fullscreen.
+- `carreras/public/service-worker.js`: soporte minimo de instalacion PWA.
+- `carreras/test/integration.js`: prueba automatizada del protocolo principal.
+- `audiomass-output.mp3`: sonido de motor servido localmente al controller.
 - `carreras/package.json`: dependencias y comando de inicio.
 - `event_racing_game_recomendaciones.md`: recomendaciones originales del producto.
 - `event_racing_game_checklist.md`: estado actual y tareas pendientes.
@@ -20,6 +25,8 @@ Este manual describe como ejecutar, operar y ajustar el proyecto actual. Los cam
 - Script `raceManager`: administra parrilla, vueltas, tiempos, posiciones y resultados.
 - Script `raceProgressReporter`: informa al servidor el avance de cada auto para ordenar a quienes no terminan.
 - Script `viewportFrames`: dibuja marcos, etiquetas y asigna materiales.
+- Script `raceAnnouncements`: muestra la ultima vuelta y anuncia inmediatamente al ganador.
+- Script `raceTelemetry`: calcula velocidad, informa telemetria y detecta el salto de respawn.
 - Entidad `Player Car`: auto base que se clona para los demas jugadores.
 - Script `arcadeCar`: movimiento, velocidad en asfalto/cesped y seguimiento de camara.
 - Template `car_1`: modelo visual importado desde `car_1.fbx`.
@@ -76,16 +83,20 @@ No cerrar esa terminal durante el evento.
 1. El servidor acepta hasta 4 jugadores.
 2. Cada jugador recibe numero, color y auto.
 3. Los autos se colocan antes de la linea de salida.
-4. `P1` inicia la carrera.
-5. Aparece una cuenta regresiva de 5 segundos.
+4. `P1` o el operador inicia la carrera.
+5. Aparece una cuenta regresiva de 5 segundos por defecto.
 6. Los autos quedan bloqueados hasta `YA!`.
-7. Cada jugador completa 3 vueltas.
+7. Cada jugador completa 3 vueltas por defecto.
 8. La pantalla actualiza posiciones usando vueltas y progreso.
-9. Cuando llega el ganador comienza un limite final de 15 segundos.
-10. Cada jugador recibe su resultado al terminar o al agotarse el limite.
-11. Quienes no terminan se ordenan por vueltas y progreso dentro de la vuelta.
-12. Cuando terminan todos o vence el limite, se muestra el podio.
-13. Despues de 12 segundos el sistema vuelve al lobby.
+9. Al comenzar la ultima vuelta configurada, pantalla y celular muestran `ULTIMA VUELTA` con feedback audiovisual.
+10. El primer jugador que completa la cantidad configurada de vueltas se anuncia inmediatamente como ganador.
+11. Cuando llega el ganador comienza un limite final de 15 segundos por defecto.
+12. Cada jugador recibe su resultado al terminar o al agotarse el limite.
+13. Quienes no terminan se ordenan por vueltas y progreso dentro de la vuelta.
+14. Cuando terminan todos o vence el limite, se muestra el podio.
+15. Despues de 12 segundos por defecto el sistema vuelve al lobby.
+
+Los valores de vueltas, countdown, limite final y duracion de resultados pueden modificarse desde `/operator` mientras la partida esta en lobby.
 
 ## 4. Parametros del servidor
 
@@ -115,7 +126,7 @@ Si se cambia el puerto, tambien deben actualizarse los atributos `serverUrl` en 
 Buscar:
 
 ```js
-const totalLaps = 3;
+let totalLaps = 3;
 ```
 
 Cambiar `3` por la cantidad deseada. Mantener sincronizado el atributo `totalLaps` de `raceManager` en PlayCanvas.
@@ -126,30 +137,30 @@ Actualmente el servidor busca lugares de `P1` a `P4` y rechaza valores mayores a
 
 ### Countdown
 
-Dentro de `startCountdown`, buscar:
+La duracion se guarda en:
 
 ```js
-let seconds = 5;
+let countdownSeconds = 5;
 ```
 
-Cambiar `5` por la duracion deseada.
+Puede cambiarse desde `/operator` sin reiniciar el servidor mientras la partida esta en lobby.
 
 ### Duracion de resultados
 
 El regreso al lobby utiliza:
 
 ```js
-lobbyTimer = setTimeout(returnToLobby, 12000);
+let resultsDurationSeconds = 12;
 ```
 
-El valor esta expresado en milisegundos. `12000` equivale a 12 segundos.
+Tambien puede cambiarse desde `/operator` y se expresa en segundos.
 
 ### Tiempo limite despues del ganador
 
 El limite final se configura en segundos:
 
 ```js
-const finishTimeoutSeconds = 15;
+let finishTimeoutSeconds = 15;
 ```
 
 Al agotarse, el servidor asigna las posiciones restantes usando el ultimo progreso informado por PlayCanvas.
@@ -185,28 +196,19 @@ Si se cambia un color, actualizar tambien:
 - Los materiales `Material.car2.P1-P4` en PlayCanvas.
 - El arreglo `colors` del script `viewportFrames`.
 
-### Volumen del motor
+### Sonido y volumen del motor
 
-Buscar en `startEngine`:
+El motor del celular utiliza `audiomass-output.mp3`, servido localmente como `/engine.mp3`. El archivo se precarga, se decodifica con Web Audio y se reproduce en loop mientras el jugador mantiene presionado `ACELERAR`.
 
-```js
-gain.gain.exponentialRampToValueAtTime(.17, now + .08);
-```
+No se aloja en PlayCanvas porque pertenece al controller web y debe funcionar dentro de la red local sin depender de Internet.
 
-`.17` es el volumen actual. Aumentarlo con cuidado para evitar distorsion en parlantes de celular.
-
-### Tono del motor
-
-Las frecuencias principales son:
+El volumen se configura en `playEngineBuffer`, dentro de `controller.html`:
 
 ```js
-low.frequency.setValueAtTime(58, now);
-low.frequency.exponentialRampToValueAtTime(105, now + .7);
-high.frequency.setValueAtTime(29, now);
-high.frequency.exponentialRampToValueAtTime(52, now + .7);
+gain.gain.value = 1;
 ```
 
-Valores mayores generan un motor mas agudo.
+El rango permitido es de `0` a `1`.
 
 ### Vibracion de choque
 
@@ -233,7 +235,81 @@ Los textos visibles estan dentro del HTML y en las funciones:
 
 El controller solo permite jugar en horizontal. En vertical oculta toda la interfaz, muestra `GIRA EL TELEFONO PARA JUGAR` y envia controles neutros para que el auto no conserve una entrada presionada.
 
-## 6. Configuracion de autos en PlayCanvas
+### Pantalla completa en Android y iOS
+
+El controller intenta activar la Fullscreen API desde los botones `CONTINUAR`, `LISTO` y `PANTALLA COMPLETA`. En Android Chrome esto oculta las barras del navegador durante el juego y solicita mantener la orientacion horizontal cuando el dispositivo lo permite.
+
+En iPhone y iPad, Safari no permite ocultar permanentemente su interfaz mediante JavaScript. Para utilizar la experiencia sin la barra del navegador:
+
+1. Abrir el controller en Safari.
+2. Pulsar `PANTALLA COMPLETA` para ver las instrucciones.
+3. Usar `Compartir > Agregar a pantalla de inicio`.
+4. Abrir `Bermuda Racing` desde el icono creado.
+
+El proyecto incluye `manifest.webmanifest`, metadatos Apple, icono de aplicacion y un service worker minimo. En modo instalado se abre directamente en fullscreen horizontal. La instalacion PWA completa de Android requiere HTTPS; sobre una URL HTTP de red local se mantiene disponible el fullscreen nativo iniciado por el usuario.
+
+### Reconexion del jugador
+
+El controller guarda un identificador de sesion en `localStorage`. Si la pagina se recarga o el WebSocket se interrumpe, intenta recuperar automaticamente el mismo nombre, numero, color y auto.
+
+El servidor reserva el puesto durante 15 segundos. Durante ese periodo el auto recibe controles neutros pero permanece en la carrera. Si el jugador no regresa antes del limite, el puesto se libera y se aplica el comportamiento normal de desconexion.
+
+La reserva se configura en `server.js`:
+
+```js
+const reconnectGraceSeconds = 15;
+```
+
+### Ultima vuelta y ganador
+
+Cuando un jugador comienza la tercera y ultima vuelta:
+
+- su celular muestra `ULTIMA VUELTA`;
+- reproduce una senal sintetizada;
+- vibra cuando el navegador lo soporta;
+- la pantalla principal muestra `ULTIMA VUELTA - NOMBRE`.
+
+El primer jugador que cruza la meta despues de las 3 vueltas recibe inmediatamente `GANASTE!` y su resultado personal. Los demas celulares y la pantalla principal muestran `NOMBRE GANA!` sin esperar el timeout de cierre.
+
+### Posicion y velocidad
+
+Durante la carrera el celular muestra:
+
+- posicion actual respecto de los participantes;
+- velocidad aproximada en `KM/H`;
+- vuelta actual dentro del estado superior.
+
+La posicion se calcula en el servidor con vueltas y progreso. El script `raceTelemetry` obtiene la velocidad a partir del desplazamiento real de cada auto y la envia cada `0.25` segundos.
+
+## 6. Panel de operador
+
+Abrir desde la computadora del evento:
+
+```text
+http://localhost:8080/operator
+```
+
+Desde otro equipo de la red utilizar:
+
+```text
+http://IP-DE-LA-PC:8080/operator
+```
+
+Funciones disponibles:
+
+- iniciar cuando todos los jugadores estan listos;
+- detener inmediatamente una carrera o countdown;
+- reiniciar al lobby conservando los jugadores conectados;
+- expulsar un jugador;
+- ver nombre, conexion y estado listo;
+- configurar vueltas;
+- configurar duracion del countdown;
+- configurar timeout posterior al ganador;
+- configurar duracion de resultados.
+
+La configuracion solo puede editarse en lobby. Los valores se mantienen en memoria hasta reiniciar el servidor.
+
+## 7. Configuracion de autos en PlayCanvas
 
 ### Entidad base
 
@@ -280,7 +356,7 @@ Materiales actuales:
 
 Editar el valor Diffuse del material correspondiente en PlayCanvas. No cambiar los nombres sin actualizar `viewportFrames`.
 
-## 7. Movimiento y cesped
+## 8. Movimiento y cesped
 
 Seleccionar `Root > Player Car > Script > arcadeCar`.
 
@@ -313,7 +389,7 @@ Este metodo no necesita Ammo.js, Collision ni Rigidbody. Para una pista nueva, c
 
 La malla de colision deberia ser simple, tener un espesor vertical aproximado de `0.1` a `0.3` unidades y exportarse con transformaciones aplicadas cuando sea posible.
 
-## 8. Camara
+## 9. Camara
 
 Los parametros se encuentran en `Player Car > Script > arcadeCar`.
 
@@ -328,15 +404,34 @@ Para ver mas pista, subir `cameraOrthoHeight`. Para acercar la vista, bajarlo.
 
 La camara usa una orientacion mundial fija para evitar que la pista rote al doblar.
 
-## 9. Parrilla, vueltas y posiciones
+## 10. Parrilla, vueltas y posiciones
 
 Script: `raceManager` en la entidad `Root`.
 
 ### Parrilla
 
-Las posiciones iniciales estan en `positionStartingGrid`, dentro del arreglo `slots`.
+Las posiciones y orientaciones finales de largada se controlan con entidades editables:
 
-Todas usan coordenadas X negativas para quedar antes de la linea de salida. Si se mueve la linea, tambien deben ajustarse estos puntos.
+```text
+Root
+└── Race Spawns
+    ├── SPAWN_P1
+    ├── SPAWN_P2
+    ├── SPAWN_P3
+    └── SPAWN_P4
+```
+
+Durante todo el countdown, `raceTelemetry` copia en cada auto la posicion y rotacion mundial de su marca correspondiente. Para ajustar la largada:
+
+1. mover cada `SPAWN_Pn` al centro del carril deseado;
+2. mantener todos los spawns antes de `CP4_FINISH`;
+3. rotar cada marca para que apunte en la direccion correcta de carrera;
+4. separar las cajas para que los autos no se superpongan;
+5. conservar exactamente los nombres `SPAWN_P1-P4`.
+
+La escala de la marca solo modifica su visual y no cambia el tamaño del auto. Despues de acomodarlas puede desactivarse el componente `Render` de cada spawn; no debe desactivarse ni renombrarse la entidad.
+
+El arreglo anterior `positionStartingGrid` de `raceManager` sigue funcionando como posicion preliminar, pero las marcas `SPAWN_P1-P4` son la referencia final durante el countdown.
 
 ### Deteccion de vueltas
 
@@ -347,6 +442,40 @@ Una vuelta se valida cuando:
 3. Vuelve a cruzar desde `x < 0` hasta `x >= 0` con `z < -8`.
 
 Si se rediseña la pista, deben actualizarse esos umbrales.
+
+### Checkpoints antiatajo
+
+Ademas de la deteccion visual de `raceManager`, el servidor valida cada vuelta con cuatro entidades obligatorias y en este orden:
+
+```text
+Root
+└── Race Checkpoints
+    ├── CP1_RIGHT
+    ├── CP2_TOP
+    ├── CP3_LEFT
+    └── CP4_FINISH
+```
+
+El script `raceTelemetry` detecta cuando cada auto entra en estas cajas y envia su numero al servidor. Una vuelta solo se suma cuando los cuatro checkpoints se completan en orden. Girar repetidamente cerca de la meta no aumenta vueltas ni permite ganar.
+
+Cada vuelta validada debe durar al menos 5 segundos. Esto evita dobles conteos accidentales y que `ULTIMA VUELTA` aparezca antes de tiempo por entradas anormalmente rapidas en varias marcas.
+
+La deteccion comprueba tanto la posicion actual como el segmento recorrido desde el frame anterior. De esta forma, un auto rapido no puede saltar una marca delgada entre dos frames.
+
+Para acomodarlos manualmente:
+
+1. seleccionar cada entidad dentro de `Root > Race Checkpoints`;
+2. moverla hasta que atraviese todo el ancho del asfalto;
+3. usar Scale para cubrir la pista sin dejar huecos laterales;
+4. rotarla para que quede transversal a la direccion de marcha;
+5. conservar los nombres exactos y el orden `CP1`, `CP2`, `CP3`, `CP4`;
+6. colocar `CP4_FINISH` sobre la linea de meta.
+
+`CP1_RIGHT`, `CP2_TOP` y `CP3_LEFT` usan el material celeste `Checkpoint.Cyan`. La meta usa el material verde `Checkpoint.Finish`. Despues de acomodarlos puede desactivarse solamente el componente Render para ocultar las marcas durante la carrera; no se debe desactivar ni renombrar la entidad.
+
+Al validar `CP4_FINISH` en el ultimo recorrido configurado, el servidor finaliza directamente a ese jugador y define su posicion. Ya no depende de recibir otro mensaje de llegada de `raceManager`. Si PlayCanvas habia informado la llegada antes de la ultima muestra de telemetria, sus tiempos se conservan. Las vueltas informadas por el cliente no se utilizan como fuente de verdad para la clasificacion.
+
+La deteccion respeta posicion, escala y rotacion de las entidades. Si cambia el trazado basta con mover las cuatro marcas, aunque los calculos de progreso de `raceManager` y `raceProgressReporter` todavia deben revisarse por separado.
 
 ### Posiciones
 
@@ -360,7 +489,7 @@ Los radios de referencia son `34.5` y `19.5`. Deben coincidir aproximadamente co
 
 El script `raceProgressReporter`, tambien instalado en `Root`, usa estos radios y los mismos umbrales de vuelta para enviar progreso al servidor cada `0.25` segundos. Si se cambia el trazado, actualizar ambos scripts en conjunto.
 
-## 10. Viewports
+## 11. Viewports
 
 Script: `viewportFrames` en la entidad `Root`.
 
@@ -373,7 +502,7 @@ Distribucion actual:
 
 El arreglo `colors` define el color de cada marco. Los resultados personales no se muestran sobre los viewports para no tapar el tiempo ni la carrera.
 
-## 11. Resultado final
+## 12. Resultado final
 
 El servidor recibe desde PlayCanvas:
 
@@ -381,7 +510,7 @@ El servidor recibe desde PlayCanvas:
 - tiempo total;
 - mejor vuelta.
 
-El orden de llegada define las primeras posiciones. Tras la llegada del ganador hay 15 segundos para terminar; los autos restantes se ordenan por vueltas completadas y progreso angular. La diferencia se calcula contra el tiempo del ganador.
+El orden de llegada define las primeras posiciones. Tras la llegada del ganador hay 15 segundos por defecto para terminar; los autos restantes se ordenan por vueltas validadas y progreso angular. La diferencia se calcula contra el tiempo del ganador.
 
 El resultado se muestra en dos lugares:
 
@@ -390,7 +519,7 @@ El resultado se muestra en dos lugares:
 
 Actualmente los tiempos de vuelta se calculan en PlayCanvas y el servidor centraliza los resultados. Para una version competitiva resistente a trampas, el servidor deberia calcular directamente los timestamps.
 
-## 12. Solucion de problemas
+## 13. Solucion de problemas
 
 ### Error `EADDRINUSE`
 
@@ -454,7 +583,7 @@ Es una limitacion del navegador o dispositivo. Android Chrome suele ofrecer sopo
 3. Volver a cruzar en la direccion correcta.
 4. Revisar los umbrales de `raceManager` si se modifico la pista.
 
-## 13. Secuencia segura para realizar cambios
+## 14. Secuencia segura para realizar cambios
 
 1. Cambiar un solo grupo de parametros por vez.
 2. Guardar la escena de PlayCanvas.
@@ -467,7 +596,17 @@ Es una limitacion del navegador o dispositivo. Android Chrome suele ofrecer sopo
 9. Confirmar QR, nombres, ready, countdown, vueltas y resultados.
 10. Registrar los valores estables usados en produccion.
 
-## 14. Zonas de velocidad
+### Prueba automatizada del flujo principal
+
+Ejecutar:
+
+```powershell
+npm test
+```
+
+La prueba levanta temporalmente un servidor aislado en el puerto `18080`, valida la recuperacion de identidad y simula ultima vuelta, checkpoints, llegada y anuncio del ganador con dos jugadores. El proceso de prueba se cierra automaticamente al finalizar.
+
+## 15. Zonas de velocidad
 
 Las primitivas reutilizables estan en:
 
@@ -501,7 +640,7 @@ La logica esta en la entidad que contiene `speedZone`, no en la primitiva visual
 
 Mantener el centro del nuevo visual en la misma posicion de la entidad. El atributo `radius` controla la activacion y no se ajusta automaticamente al tamaño del modelo.
 
-## 15. Respawn automatico
+## 16. Respawn automatico
 
 El respawn automatico esta implementado dentro de `arcadeCar`.
 
@@ -511,12 +650,17 @@ Con una pista nueva, un jugador puede salir demasiado lejos, quedar mal orientad
 
 ### Comportamiento actual
 
-1. Mientras el auto circula sobre `asphalt`, guardar una posicion y orientacion valida.
+1. Mientras el auto circula, conservar un historial corto de posiciones y orientaciones.
 2. Si permanece fuera de asfalto durante 2.5 segundos, iniciar la recuperacion.
-3. Reubicarlo en la ultima posicion valida.
-4. Dejar su velocidad en cero.
-5. Mantener intactos jugador, nombre, color, vuelta, tiempo y camara.
-6. Esperar algunos segundos antes de permitir otro respawn.
+3. Detectar el salto de recuperacion generado por `arcadeCar`.
+4. Retroceder aproximadamente `respawnDelay + 0.75` segundos dentro de su propio historial.
+5. Restaurar una posicion anterior sobre la pista y la orientacion que llevaba al circular correctamente.
+6. Dejar su velocidad en cero.
+7. Mantener intactos jugador, nombre, color, vuelta, tiempo y camara.
+8. Esperar algunos segundos antes de permitir otro respawn.
+9. Mostrar `VOLVIENDO A PISTA...` en el celular al detectar la reposicion.
+
+No utiliza puntos manuales de respawn. La referencia se obtiene del historial real de cada auto antes de abandonar la pista.
 
 ### Parametros configurables
 
@@ -528,6 +672,13 @@ Seleccionar `Root > Player Car > Script > arcadeCar`:
 | `respawnCooldown` | 3 | Espera minima antes de permitir otro respawn. |
 
 Los autos clonados para `P2-P4` heredan estos valores de `Player Car`.
+
+El observador `raceTelemetry`, instalado en `Root`, incluye:
+
+| Parametro | Valor | Funcion |
+| --- | ---: | --- |
+| `sendInterval` | 0.25 | Frecuencia de telemetria hacia el celular. |
+| `respawnDistance` | 4 | Salto minimo de posicion para reconocer una reposicion. |
 
 ### Criterio de aceptacion
 
