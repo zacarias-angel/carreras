@@ -2,9 +2,6 @@
   "name": "totem-racing-controller",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "start": "node server.js"
-  },
   "dependencies": {
     "express": "^5.1.0",
     "qrcode": "^1.5.4",

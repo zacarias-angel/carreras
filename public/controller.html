@@ -131,8 +131,26 @@
     const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isStandalone = () => navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
     let deferredInstallPrompt;
+    let wakeLock;
+    let hasPlayed = false;
 
     document.body.classList.add('waiting');
+
+    async function requestWakeLock() {
+      if (!navigator.wakeLock || wakeLock) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (_error) {
+        // Wake Lock is optional and commonly blocked until a user gesture.
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (!wakeLock) return;
+      await wakeLock.release();
+      wakeLock = null;
+    }
 
     async function lockLandscape() {
       if (!screen.orientation?.lock) return;
@@ -315,6 +333,7 @@
         ? 'Carrera finalizada'
         : (result.position === 1 ? '' : `Te faltaron ${result.difference.toFixed(2)} s`);
       resultPanel.hidden = false;
+      hasPlayed = true;
       document.body.classList.add('waiting');
       stopEngine();
     }
@@ -390,8 +409,9 @@
             readyButton.hidden = !playerName;
             nameEntry.hidden = Boolean(playerName);
             readyButton.disabled = !isHost && isReady;
-            readyButton.textContent = isHost ? 'INICIAR CARRERA' : (isReady ? 'PREPARADO' : 'LISTO');
+            readyButton.textContent = isHost ? 'INICIAR CARRERA' : (isReady ? 'PREPARADO' : (hasPlayed ? 'JUGAR DE NUEVO' : 'LISTO'));
             status.textContent = player ? `P${player} ${playerName} - ${isReady ? 'LISTO' : 'ESPERANDO'}` : 'CONECTANDO';
+            releaseWakeLock();
           }
           if (message.state === 'countdown') {
             readyButton.hidden = true;
@@ -401,11 +421,13 @@
             document.body.classList.remove('waiting');
             readyButton.hidden = true;
             status.textContent = `P${player} - CARRERA`;
+            requestWakeLock();
           }
           if (message.state === 'finished') {
             document.body.classList.add('waiting');
             stopEngine();
             status.textContent = message.winner === player ? `P${player} - GANADOR` : `GANA P${message.winner}`;
+            releaseWakeLock();
           }
         }
       });
@@ -503,6 +525,9 @@
     });
     document.addEventListener('fullscreenchange', () => {
       fullscreenButton.hidden = Boolean(document.fullscreenElement);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !document.body.classList.contains('waiting')) requestWakeLock();
     });
 
     if (isStandalone()) fullscreenButton.hidden = true;

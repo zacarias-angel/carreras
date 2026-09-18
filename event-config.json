@@ -1,0 +1,6 @@
+{
+  "totalLaps": 3,
+  "countdownSeconds": 5,
+  "finishTimeoutSeconds": 15,
+  "resultsDurationSeconds": 12
+}

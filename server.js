@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { WebSocketServer, WebSocket } = require('ws');
@@ -11,10 +12,28 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const players = new Map();
-let totalLaps = 3;
-let countdownSeconds = 5;
-let finishTimeoutSeconds = 15;
-let resultsDurationSeconds = 12;
+const eventConfigPath = process.env.EVENT_CONFIG_PATH || path.join(__dirname, 'event-config.json');
+const leaderboardPath = process.env.LEADERBOARD_PATH || path.join(__dirname, 'event-leaderboard.json');
+const defaultConfig = { totalLaps: 3, countdownSeconds: 5, finishTimeoutSeconds: 15, resultsDurationSeconds: 12 };
+
+function readJson(filePath, fallback) {
+  try {
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return Array.isArray(fallback) ? value : { ...fallback, ...value };
+  } catch (_error) {
+    return Array.isArray(fallback) ? [...fallback] : { ...fallback };
+  }
+}
+
+function writeJson(filePath, value) {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+let { totalLaps, countdownSeconds, finishTimeoutSeconds, resultsDurationSeconds } = readJson(eventConfigPath, defaultConfig);
+let leaderboard = readJson(leaderboardPath, []);
+leaderboard = Array.isArray(leaderboard)
+  ? leaderboard.filter(entry => entry && Number.isFinite(entry.totalTime))
+  : [];
 const reconnectGraceSeconds = 15;
 const minimumLapSeconds = process.env.MIN_LAP_SECONDS === undefined
   ? 5
@@ -74,13 +93,27 @@ function raceConfig() {
   return { totalLaps, countdownSeconds, finishTimeoutSeconds, resultsDurationSeconds };
 }
 
+function leaderboardState() {
+  return [...leaderboard]
+    .sort((a, b) => a.totalTime - b.totalTime)
+    .slice(0, 10);
+}
+
+function saveLeaderboardResult(result) {
+  if (!result.completed) return;
+  leaderboard.push({ name: result.name, totalTime: result.totalTime, bestLap: result.bestLap, recordedAt: new Date().toISOString() });
+  leaderboard = leaderboardState();
+  writeJson(leaderboardPath, leaderboard);
+}
+
 function operatorState() {
   return {
     type: 'operatorState',
     state: raceState,
     players: playerState(),
     config: raceConfig(),
-    results
+    results,
+    leaderboard: leaderboardState()
   };
 }
 
@@ -128,7 +161,7 @@ function returnToLobby() {
   checkpointState = new Map();
   pendingFinishes = new Map();
   for (const session of players.values()) session.ready = false;
-  broadcast({ type: 'race', state: raceState, players: playerState(), totalLaps });
+  broadcast({ type: 'race', state: raceState, players: playerState(), totalLaps, config: raceConfig(), leaderboard: leaderboardState() });
 }
 
 function finishRace() {
@@ -262,6 +295,7 @@ function updateConfig(config) {
   countdownSeconds = Math.max(1, Math.min(30, Math.round(Number(config.countdownSeconds) || countdownSeconds)));
   finishTimeoutSeconds = Math.max(3, Math.min(120, Math.round(Number(config.finishTimeoutSeconds) || finishTimeoutSeconds)));
   resultsDurationSeconds = Math.max(3, Math.min(120, Math.round(Number(config.resultsDurationSeconds) || resultsDurationSeconds)));
+  writeJson(eventConfigPath, raceConfig());
   broadcast({ type: 'race', state: raceState, players: playerState(), totalLaps, config: raceConfig() });
   return true;
 }
@@ -289,10 +323,12 @@ function broadcastTelemetry() {
   }
 }
 
-function sendLapState(player, laps) {
+function sendLapState(player, laps, lapTime, totalTime, bestLap) {
   const controller = players.get(player)?.socket;
   const currentLap = Math.min(totalLaps, laps + 1);
-  if (controller) send(controller, { type: 'lap', player, lap: currentLap, totalLaps });
+  const message = { type: 'lap', player, lap: currentLap, totalLaps, lapTime, totalTime, bestLap };
+  if (controller) send(controller, message);
+  broadcastToGames(message);
 
   if (currentLap === totalLaps && !lastLapPlayers.has(player)) {
     lastLapPlayers.add(player);
@@ -316,11 +352,12 @@ function recordFinish(message) {
     player,
     name: players.get(player)?.playerName || `P${player}`,
     position: results.length + 1,
-    totalTime: Math.max(0, Number(message.totalTime) || 0),
-    bestLap: Math.max(0, Number(message.bestLap) || 0),
+    totalTime: Math.max(0, (Date.now() - raceStartedAt) / 1000),
+    bestLap: Math.max(0, Number(checkpoints.bestLap) || 0),
     completed: true
   };
   results.push(result);
+  saveLeaderboardResult(result);
   const winnerTime = results[0].totalTime;
   result.difference = Math.max(0, result.totalTime - winnerTime);
 
@@ -347,20 +384,23 @@ function processCheckpoint(player, checkpoint) {
   } else {
     const now = Date.now();
     state.next = 0;
-    if (now - state.lapStartedAt < minimumLapSeconds * 1000) {
+    const lapTime = (now - state.lapStartedAt) / 1000;
+    if (lapTime < minimumLapSeconds) {
       state.lapStartedAt = now;
       return;
     }
     state.lapStartedAt = now;
     state.laps += 1;
+    state.bestLap = state.bestLap ? Math.min(state.bestLap, lapTime) : lapTime;
     const progress = raceProgress.get(player) || {};
-    raceProgress.set(player, { ...progress, laps: state.laps });
-    sendLapState(player, state.laps);
+    const totalTime = Math.max(0, (now - raceStartedAt) / 1000);
+    raceProgress.set(player, { ...progress, laps: state.laps, totalTime, bestLap: state.bestLap });
+    sendLapState(player, state.laps, lapTime, totalTime, state.bestLap);
     if (state.laps >= totalLaps) {
       recordFinish(pendingFinishes.get(player) || {
         player,
         totalTime: Math.max(0, (Date.now() - raceStartedAt) / 1000),
-        bestLap: Math.max(0, Number(progress.bestLap) || 0)
+        bestLap: state.bestLap
       });
     }
   }

@@ -1,12 +1,17 @@
 const assert = require('assert');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
 const WebSocket = require('ws');
 
 const port = 18080;
+const testSuffix = `${process.pid}-${Date.now()}`;
+const eventConfigPath = path.join(os.tmpdir(), `totem-racing-config-${testSuffix}.json`);
+const leaderboardPath = path.join(os.tmpdir(), `totem-racing-leaderboard-${testSuffix}.json`);
 const server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-  env: { ...process.env, PORT: String(port), MIN_LAP_SECONDS: '0' },
+  env: { ...process.env, PORT: String(port), MIN_LAP_SECONDS: '0', EVENT_CONFIG_PATH: eventConfigPath, LEADERBOARD_PATH: leaderboardPath },
   stdio: ['ignore', 'pipe', 'inherit']
 });
 
@@ -155,7 +160,9 @@ async function run() {
   assert.equal(winner.name, 'Piloto');
   const rivalWinnerMessage = await waitFor(controllerTwo, message => message.type === 'winnerDeclared');
   assert.equal(rivalWinnerMessage.player, 1);
-  await waitFor(controller, message => message.type === 'personalResult' && message.result.position === 1);
+  const personalResult = await waitFor(controller, message => message.type === 'personalResult' && message.result.position === 1);
+  assert.ok(personalResult.result.totalTime < 5, 'The server must not trust the client finish time.');
+  await waitFor(operator, message => message.type === 'operatorState' && message.leaderboard?.some(entry => entry.name === 'Piloto'));
 
   operator.socket.send(JSON.stringify({ type: 'operatorCommand', command: 'reset' }));
   await waitFor(operator, message => message.type === 'operatorState' && message.state === 'lobby');
@@ -174,4 +181,9 @@ run()
     console.error(error);
     process.exitCode = 1;
   })
-  .finally(() => server.kill());
+  .finally(() => {
+    server.kill();
+    for (const filePath of [eventConfigPath, leaderboardPath]) {
+      try { fs.unlinkSync(filePath); } catch (_error) {}
+    }
+  });

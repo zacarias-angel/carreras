@@ -20,7 +20,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Privilegio de inicio para `P1`.
 - [x] Bloqueo de jugadores nuevos durante una carrera.
 - [x] Retorno automatico al lobby despues de resultados.
-- [ ] Boton explicito `JUGAR DE NUEVO`.
+- [x] Boton explicito `JUGAR DE NUEVO`.
 - [ ] Tiempo objetivo medido desde QR hasta READY.
 - [ ] Aceptacion configurable de terminos o consentimiento.
 
@@ -33,7 +33,8 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Nombre de los jugadores disponible para clasificacion y resultados.
 - [ ] Logo y nombre comercial de la experiencia.
 - [ ] URL corta alternativa al QR.
-- [ ] Texto de instrucciones de alto impacto.
+- [x] Texto de instrucciones de alto impacto.
+- [x] Pantalla de intro antes de ingresar al controller.
 - [ ] Tarjetas completas de jugadores en el lobby.
 - [ ] Indicar visualmente el maximo de 4 jugadores.
 - [ ] Branding configurable sin editar scripts.
@@ -114,7 +115,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Shake de interfaz al chocar.
 - [x] Informacion de posicion en vivo dentro del celular.
 - [x] Orientacion landscape obligatoria con aviso para girar.
-- [ ] Screen Wake Lock.
+- [x] Screen Wake Lock.
 - [x] Fullscreen progresivo y PWA standalone para Android/iOS.
 
 ## 7. Colisiones y recuperacion
@@ -163,7 +164,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [ ] Pruebas en matriz Android Chrome / iOS Safari.
 - [ ] Diagnostico automatico de WebSocket, audio, vibracion y resolucion.
 - [x] Servidor autoritativo para orden de checkpoints, vueltas y ganador.
-- [ ] Tiempos calculados directamente por el reloj del servidor.
+- [x] Tiempos calculados directamente por el reloj del servidor.
 
 ## 10. Operacion del evento
 
@@ -185,7 +186,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 
 ## 11. Ranking, premios y datos
 
-- [ ] Ranking persistente del evento.
+- [x] Ranking persistente del evento.
 - [ ] Top de tiempos del dia.
 - [ ] Record de pista.
 - [ ] Aviso de nuevo record.
@@ -232,7 +233,7 @@ Documento de seguimiento basado en `event_racing_game_recomendaciones.md` y en e
 - [x] Aviso de respawn en el celular.
 - [x] Checkpoints antiatajo validados por el servidor.
 - [ ] Ranking persistente de mejores tiempos.
-- [ ] Configuracion por archivo de evento.
+- [x] Configuracion por archivo de evento.
 - [ ] Pruebas fisicas completas con 1, 2, 3 y 4 autos en Android/iOS.
 
 ## Alcance del MVP completado: respawn automatico

@@ -7,6 +7,8 @@ Este manual describe como ejecutar, operar y ajustar el proyecto actual. Los cam
 ### Archivos locales
 
 - `carreras/server.js`: servidor HTTP, WebSocket, jugadores, lobby, countdown y resultados.
+- `carreras/event-config.json`: configuracion persistente de vueltas y tiempos del evento.
+- `carreras/event-leaderboard.json`: ranking persistente generado automaticamente al finalizar carreras.
 - `carreras/public/controller.html`: interfaz que se abre en cada celular.
 - `carreras/public/operator.html`: panel de control para el staff.
 - `carreras/public/manifest.webmanifest`: configuracion PWA y fullscreen.
@@ -120,6 +122,21 @@ npm start
 ```
 
 Si se cambia el puerto, tambien deben actualizarse los atributos `serverUrl` en PlayCanvas.
+
+### Configuracion persistente del evento
+
+El archivo `carreras/event-config.json` conserva la configuracion entre reinicios:
+
+```json
+{
+  "totalLaps": 3,
+  "countdownSeconds": 5,
+  "finishTimeoutSeconds": 15,
+  "resultsDurationSeconds": 12
+}
+```
+
+Tambien puede editarse desde `/operator` durante el lobby. Al guardar, el panel actualiza este archivo automaticamente.
 
 ### Cantidad de vueltas
 
@@ -235,6 +252,10 @@ Los textos visibles estan dentro del HTML y en las funciones:
 
 El controller solo permite jugar en horizontal. En vertical oculta toda la interfaz, muestra `GIRA EL TELEFONO PARA JUGAR` y envia controles neutros para que el auto no conserve una entrada presionada.
 
+### Intro y pantalla activa
+
+La pantalla principal muestra una intro `BERMUDA RACING` mientras el servidor esta en lobby, con QR e instrucciones `ESCANEA - CORRE - GANA`. Se oculta automaticamente al iniciar el countdown y vuelve cuando la carrera regresa al lobby. El controller no muestra esta intro y solicita Screen Wake Lock durante la carrera cuando el navegador lo soporta.
+
 ### Pantalla completa en Android y iOS
 
 El controller intenta activar la Fullscreen API desde los botones `CONTINUAR`, `LISTO` y `PANTALLA COMPLETA`. En Android Chrome esto oculta las barras del navegador durante el juego y solicita mantener la orientacion horizontal cuando el dispositivo lo permite.
@@ -307,7 +328,7 @@ Funciones disponibles:
 - configurar timeout posterior al ganador;
 - configurar duracion de resultados.
 
-La configuracion solo puede editarse en lobby. Los valores se mantienen en memoria hasta reiniciar el servidor.
+La configuracion solo puede editarse en lobby. Los valores quedan guardados en `event-config.json` y se recuperan al reiniciar el servidor. Debajo de los jugadores se muestran los diez mejores tiempos finalizados, conservados en `event-leaderboard.json`.
 
 ## 7. Configuracion de autos en PlayCanvas
 
@@ -517,7 +538,7 @@ El resultado se muestra en dos lugares:
 - Podio general en la pantalla principal.
 - Pantalla personal en el celular.
 
-Actualmente los tiempos de vuelta se calculan en PlayCanvas y el servidor centraliza los resultados. Para una version competitiva resistente a trampas, el servidor deberia calcular directamente los timestamps.
+El servidor calcula timestamps de vuelta y llegada con su propio reloj al validar checkpoints. PlayCanvas solo comunica el paso por cada checkpoint y la telemetria visual.
 
 ## 13. Solucion de problemas
 
